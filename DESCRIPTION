@@ -1,0 +1,10 @@
+Package: spptrees
+Title: Kernel Intensity Estimation of Spatial Poisson Processes from K-Tree Sampling
+Version: 0.0.0.9000
+Authors@R: person("Philip", "Stallworth", email = "pstallwo@reed.edu", role = c("aut", "cre"))
+Description: TBA
+Depends: R (>= 3.2.2)
+License: NA
+URL: http://github.com/phstallworth/spptrees
+BugReports: http://github.com/phstallworth/spptrees/issues
+LazyData: true

@@ -1,0 +1,31 @@
+\documentclass{article}
+\usepackage{amsmath}
+\usepackage{amssymb}
+
+\title{Cox Process Notes: From Spatial Cluster Modelling}
+
+\begin{document}
+\maketitle
+\subsection*{Introduction}
+\subsection*{Poisson Process}
+{\it They include a bunch of information that I already have regarding the specifications of a hpp vs. a ipp. However, the discussion on independent thinning seems to be useful.}
+
+By (b)-(c) it is very easy to simulate a homogenous Poisson process $X$ on, for example, a rectangular or spherical region $B$. Denote $\rho_{hom}$ the intensity of $X$, and imagine we have simulated $X$ on $B$. Suppose we want to simulate another Poisson process $X_{thin}$ on a bounded region $A\subseteq B$, where $X_{thin}$ has an intensity function $\rho_{thin}$ which is bounded on $A$ by $\rho_{hom}$. Then we obtain a simulation of $X_{thin} \cap A$ by including/excluding the points from $X\cap A$ in $X_{thin} \cap A$ independently of each other, so that a point $x\in X\cap A$ is included in $X_{thin} \cap A$ with probability $\pi(x) = \rho_{thin}(x)/\rho_{hom}$. This procedure is called {\it independent thinning.}
+
+\subsection*{Cox Processes}
+A natural extension of a Poisson process is to let $\mu$ be a realization of a random meausre $M$ so that the conditional distribution of $X$ given $M = \mu$ follows a Poisson process with intensity measure $\mu$. Then $X$ is said to be a {\it Cox Process driven by $M$}. 
+
+{\it Next they give some examples}
+
+Cox processes are like inhomogeneous Poisson process models for aggregated point patterns. Usually in applications $M$ is unobserved, and so we cannot distinguish a Cox process $X$ from its corresponding Poisson process $X\setminus M$ when only one realization of $X\cap W$ is available(where $W$ denotes the observation window). Which of the two symbols might be most appropritate depends on prior knowledge and the scientific questions to be investigated, the particular application, and another application is nonparametric Bayesian modelling.{\it Is there space here to let the underlying randomness decompose into consistent and inconsistent parts?} 
+
+Distribution properties of a Cox process $X$ driven by $M$ follow immediately by conditioning on $M$ and exploiting the properties of the Poisson process $X|M$. For instance, $$EN(A) = EM(A)$$ and $$cov(N(A),N(B)) = cov(M(A), M(B)) + EM(A\cap B)$$ for bounded regions $A$ and $B$. Hence, $var(N(A)) = var(M(A)) + EM(A) \geq EN(A)$ with equality only when $M(A)$ is almost surely constant as in the Poisson case. In other words, a Cox process exhibits over dispersion when compared to a Poisson process. 
+
+In many specific models for Cox processes, including those considered in the earlier examples and in section 3.5, $M$ is specified by a nonnegative spatial process $Z = \{ Z(x) : x\in \mathbb{R}^d \}$ so that $$M(A) = \int_A Z(x) dx. \; \; (3.2)$$ Then we say that $X$ is {\it driven by the random intensity surface $Z$}. 
+
+Simulation of $X$ is easy in principle: if we have a simulation $z_A = \{z(x) : x\in A\}$ of $Z$ restricted to a bounded region $A$, where $z_A$ is bounded by a constant, then the simulation method at the end of the poisson process section can be used. 
+
+\subsection*{Summary Statistics}
+The first and second order moments of the counts $N(\cdot)$ for a Cox process can be expressed in terms of two functions: $$\rho(x) = E[Z(x)] \; \; \text{and} \; \; g(x_1, x_2) = E[Z(x_1)Z(x_2)]/[\rho(x_1) \rho(x_2)]$$ which are called the {\it intensity function} and the {\it pair correlation function}, respectively.   
+
+\end{document}

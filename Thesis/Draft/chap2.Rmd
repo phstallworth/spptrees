@@ -1,0 +1,10 @@
+---
+output: pdf_document
+header-includes: 
+- \usepackage{amssymb,amsthm,amsmath}
+- \usepackage{chemarr}
+---
+
+<!--
+You can delete the header-includes (lines 3-5 above) if you like and also the chunk below since it is loaded in the skeleton.Rmd file.  They are included so that chap2.Rmd will compile by itself when you hit Knit PDF.
+-->

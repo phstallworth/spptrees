@@ -1,0 +1,26 @@
+---
+title: "Understanding the data"
+output: html_document
+---
+
+Michael Lavine has said that the measurements in the `plants-all-bogs.csv` file
+are measured in mm, starting from the same origin as the 10 x 10 meter grid.
+This allows us to plot the plants (red) on the same plot as the sites (black).
+
+```{r read-dat, message = FALSE, fig.height = 5, fig.width = 5}
+library(dplyr)
+d <- read.csv("../plants-all-bogs.csv")
+d_12M <-
+  d %>%
+  filter(bog == "12M")
+sx <- rep(1:10, 10)
+sy <- rep(1:10, each = 10)
+plot(sx, sy, xlab = "", ylab = "", pch = 16)
+points(d_12M$plantX / 1000, d_12M$plantY / 1000, pch = 16, col = "red")
+```
+
+Which can then be compared to the image from Ellison et al.
+
+ <img src="../12Mbog.pdf" alt="12Mbog" height="400" width="400"> 
+
+It looks like we have a match.

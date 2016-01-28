@@ -1,0 +1,5 @@
+name: Reed Senior Thesis
+description: >
+ Template for creating a Senior Thesis at Reed College using R Markdown based on the LaTeX template.
+create_dir: true
+

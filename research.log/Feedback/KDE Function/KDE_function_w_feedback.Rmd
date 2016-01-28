@@ -1,0 +1,248 @@
+---
+output: html_document
+---
+# Introduction and Basic Math    
+Kernel Density Estimation is a non-parametric method of estimating the PDF of random variable. It is useful when inferences about a population are made, based on a finite sample.^1^ It is, fundamentally, a smoothing problem. More simplistic non-parametric techniques, such as the histogram, often exhibit discontinuities not due to the underlying density. KDE solves this problem by allowing smooth, continuous kernels to be used.   
+
+Definitions^2^:  
+A *kernel function* $k(u):\mathbb{R} \rightarrow \mathbb{R}$ is any function which satisfies $\int_{-\infty}^\infty k(u) du = 1.$
+
+A *non-negative* kernel satisfies $k(u) \geq 0$ for all $u$. In this case, $k(u)$ is a probability density function.
+
+A *symmetric* kernel function satisfies $k(u) = k(-u)$ for all $u$.  
+
+Now we derive the basic form of the kernel density estimate.^3^   
+
+The probability that a vector $x$, drawn from a distribution $p(x)$, will fall in a given region $\mathcal{R}$ of the sample space is $$ P = \int_\mathcal{R} p(x')dx'.$$ Now suppose that $N$ vectors $\{x_1, x_2, \dots x_N\}$ are drawn from the distribution. The probability that $k$ of these $N$ vectors fall in $\mathcal{R}$ is given by the binomial distribution $$P(k) = N \choose{k}P^k(1-P)^{N-k}.$$ It case be shown that the mean and variange of the ration $k/N$ are $P$ and $\frac{P(1-P)}{N}$, respectively. Consequently, as $N\rightarrow \infty$ the variance decreases, wo we can espect that a good estimate of the probability $P$ can be obtained from the mean fraction of the points that fall within $\mathcal{R}$ $$P\cong \frac{k}{N}.$$ Alternatively, if we assume that $\mathcal{R}$ is so small that $p(x)$ doesn't vary much within it, then $$ \int_\mathcal{R} p(x')dx' \cong p(x)V$$ (where $V$ is the volume inclosed by $\mathcal{R}$). Merging these two results demonstrates that $$p(x) \cong \frac{k}{NV}.$$ 
+
+In practice, $N$ is fixed. We could improve the accuracy of $p(x)$ by restricting $V$, but then $\mathcal{R}$ would become so small that no examples would be enclosed. This parallels the issue of bin width selection in histogram modelling. In practice, we have to find a compromise for $V$ that is large enough to include examples within $\mathcal{R}$ and small enough to support the assumption that $p(x)$ is constant within $\mathcal{R}$. Kernel Density Estimation arises when we fid $V$ and determine $k$ from the data. As a fun asidie, K-nearest-neighbor arises when we fix k and determine $V$ from the data. 
+
+Letting $K(\cdot)$ be a kernel. We can determine that the density at a location $x$ is $$p_{KDE}(x) = \frac{1}{Nh^D}\sum_{n=1}^NK(\frac{x-x_k}{h}).$$ There are a number of common Kernels: uniform, triangular, biweight, triweight, Epanechnikov, normal, etc. Though the Epanechnikov is the optimal with regard to MSE, I use a normal kernel for my function. For a normal kernel function $$K(u) = \frac{1}{ \sqrt{2 \pi }}e^{-\frac{1}{2}u^2}.$$ 
+
+# Packages!!!
+```{r}
+library(MASS)
+library(graphics)
+library(mvtnorm)
+```
+
+# One-Dimensional Case
+I have one function for the one-dimensional case.
+
+* * *
+
+## Comments
+
+We discussed how the function can be simplied so that it takes the data and the bandwith as "parameters" and is simply a function of where ever along $\mathbb{R}^1$ you would like to evaluate it. We want:
+
+\[ \hat{p}(x) = f(x \,|\, \textrm{data}, \lambda) \]
+
+(ack, doing KDE on point processes will $\lambda$ doing double time!). This also
+would make it in accordance with an important guideline of programming: a function
+should do only one thing.
+
+R really likes to do operations on vectors, and whenever you can phrase problems
+in terms of vectors and matrices, things will be more succinct and much quicker.
+Try to rewrite the simpler function using the vectorized ability of `dnorm()`
+demonstrated below.
+
+```{r}
+mus <- c(2, 3, 5)
+sigmas <- c(1, 2, 1)
+x <- rep(1, 3)
+dnorm(x, mean = mus, sd = sigmas)
+sum(dnorm(x, mean = mus, sd = sigmas))
+```
+
+You should be able to write the function in fewer than 5 lines.
+
+* * *
+
+```{r}
+KDE_height <- function(p, d, bw){
+  sum(dnorm(0, mean = (p-d)/bw))/(bw * length(d))
+}
+
+plot1KDE <- function(d, bw, dmin = min(d) - abs(1.25*min(d)), dmax = max(d) + abs(1.25*max(d))){
+  bins <- seq(dmin, dmax, length.out = 1000)
+  heights <- sapply(bins, KDE_height, d = d, bw = bw)
+  plot(heights ~ bins, type = 'l')
+}
+```
+
+And some test cases. In this first case I compare my results to the results of density() with my selected bw. 
+
+First, so we can be consistent, I'm going to set all my data:
+
+```{r}
+set.seed(306)
+
+x <- rgamma(30, 3, 4) # 1D
+
+y <- rexp(30, 4)
+
+df <- data.frame(x, y) # 2D
+
+```
+
+```{r}
+bw_x <- ucv(x)
+bw_x
+l <- rep(NA, 1000)
+s <- rep(NA, 1000)
+step <- 1/100
+pos <- -5
+for(i in 1:1000){
+  l[i] = dgamma(pos, 3, 4)
+  s[i] <- pos
+  pos <- pos + step
+}
+plot(l ~ s, type = "l", lwd = 2, main = "Bandwidth = 0.05")
+lines(myKDE1(x, 0.05), col = "red")
+lines(density(x, bw = 0.05))
+
+plot(l ~ s, type = "l", lwd = 2, main = "Bandwidth = 0.1")
+lines(myKDE1(x, 0.1), col = "blue")
+lines(density(x, bw = 0.1))
+
+plot(l ~ s, type = "l", lwd = 2, main = "Bandwidth = CV Opt")
+lines(myKDE1(x, bw_x), col = "green")
+lines(density(x, bw = bw_x))
+```
+
+
+For the following, I only include the results.
+
+```{r}
+bw_y <- ucv(y)
+bw_y
+l <- rep(NA, 1000)
+s <- rep(NA, 1000)
+step <- 1/100
+pos <- -5
+for(i in 1:1000){
+  l[i] <- dexp(pos, 4)
+  s[i] <- pos
+  pos <- pos + step
+}
+plot(l ~ s, type = "l", lwd = 3)
+legend(-4.5, 3, c(0.05, 0.01, "CV Opt"), col = c("red", "blue", "green"), lty = c(1, 1, 1))
+lines(myKDE1(y, 0.05), col = "red")
+lines(myKDE1(y, 0.1), col = "blue")
+lines(myKDE1(y, bw_y), col = "green")
+```
+
+
+```{r}
+z <- rnorm(100, 0, 1)
+bw_z <- ucv(z)
+bw_z
+my_points <- myKDE1(z, 0.05)
+l <- rep(NA, 1000)
+s <- rep(NA, 1000)
+step <- 1/100
+pos <- -5
+for(i in 1:1000){
+  l[i] = dnorm(pos)
+  s[i] <- pos
+  pos <- pos + step
+}
+plot(l ~ s, type = "l", lwd = 2)
+legend(-5, 0.4, c(0.05, 0.01, "CV Opt"), col = c("red", "blue", "green"), lty = c(1, 1, 1))
+lines(myKDE1(z, 0.05), col = "red")
+lines(myKDE1(z, 0.1), col = "blue")
+lines(myKDE1(z, bw_z), col = "green")
+```
+
+# Two-Dimensional Case
+
+For the two-dimensional case, I have included two functions. One assumes kernel independence and the other assumes factor-independence. 
+
+```{r}
+
+get_height2 <- function(x, y, d, bw){
+    sum(dnorm((x - d[,1])/bw[1]) * dnorm((y - d[,2])/bw[2]))/(prod(nrow(d), bw))
+}
+myKDE2_KI <- function(d, bw, xmin = min(d[,1]) - bw[1] * abs(pnorm(0.025, min(d[,1]/bw[1]))), 
+                             xmax = max(d[,1]) - bw[1] * abs(pnorm(0.975, max(d[,1]/bw[1]))), 
+                             ymin = min(d[,2]) - bw[2] * abs(pnorm(0.025, min(d[,2]/bw[2]))), 
+                             ymax = max(d[,1]) - bw[1] * abs(pnorm(0.975, max(d[,1]/bw[1])))){
+  x = seq(xmin, xmax, length.out = 100)
+  y = seq(ymin, ymax, length.out = 100)
+  heights <- matrix(rep(NA, length(x)* length(y)), nrow = length(x), byrow = T)
+  #heights <- matrix(sapply(x, sapply(y, get_height2, y = y, d =d, bw = bw), nrow = 100, byrow = T) 
+  # I would like this to work faster, but am still struggling to figure it out. 
+  for(i in 1:length(x)){g
+    for(j in 1:length(y)){
+      heights[i, j] <- get_height2(x[i], y[j],d, bw)
+    }
+  }
+  contour(x, y, heights)
+}
+
+
+myKDE2_FI <- function(d, bw){
+  get_height <- function(p, d, bw){
+    height <- 0
+    for(datum in d){
+      height <- height + 1/sqrt(2*pi)*exp(-1/2*((p-datum)/bw)^2)
+    }
+    height <- height/prod(length(d), bw)
+    return(height)
+  }
+  x = seq(min(d[,1]) - 2, max(d[,1])+2, length.out = 100)
+  y = seq(min(d[,2]) - 2, max(d[,2])+2, length.out = 100)
+  heights <- matrix(rep(NA, length(x)* length(y)), nrow = length(x), byrow = T)
+  for(i in 1:length(x)){
+    for(j in 1:length(y)){
+      heights[i, j] <- get_height(x[i], d[,1], bw[1]) * get_height(y[j], d[,2], bw[2])
+    }
+  }
+  contour(x, y, heights)
+}
+
+```
+
+Now to test it out! We have $x$ and $y$ distributed as before.
+
+```{r}
+
+myKDE2_KI(data.frame(x, y), c(0.3, 0.3))
+points(data.frame(x, y))
+
+myKDE2_KI(data.frame(x, y), c(bw_x, bw_y))
+points(data.frame(x, y))
+
+myKDE2_FI(data.frame(x, y), c(0.3, 0.3))
+points(data.frame(x, y))
+
+myKDE2_FI(data.frame(x, y), c(bw_x, bw_y))
+points(data.frame(x, y))
+```
+
+We reset $a$ and create a new normal $b$.
+```{r}
+a <- rnorm(50)
+b <- rnorm(50)
+bw_a <- ucv(a)
+bw_b <- ucv(b)
+par(mfrow = c(1, 1))
+
+myKDE2_KI(data.frame(a, b), c(1, 1))
+points(data.frame(a, b))
+
+myKDE2_KI(data.frame(a, b), c(bw_a, bw_b))
+points(data.frame(a, b))
+
+myKDE2_FI(data.frame(a, b), c(1, 1))
+points(data.frame(a, b))
+
+myKDE2_FI(data.frame(a, b), c(bw_a, bw_b))
+points(data.frame(a, b))
+```
+
+# Bandwidth Selection through Cross-Validation
+I'm lazy, so I just found a function on CRAN that would use crosss-validation to for optimal bandwidth selection. I would like to work more to figure it out, but didn't realize it's complexity in time. 
+
+
+

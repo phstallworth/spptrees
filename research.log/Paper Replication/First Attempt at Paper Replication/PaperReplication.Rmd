@@ -1,0 +1,467 @@
+---
+title: "Paper Replication"
+header-includes:
+  - \usepackage{amsmath}
+output: pdf_document
+---
+
+# Make simulated spp data
+I'm trying to figure out the spatstat package here.
+
+```{r}
+library(spatstat)
+library(MASS)
+library(spptrees)
+
+set.seed(1234)
+
+#set the desired window. 
+my_window <- owin(xrange = c(-1, 12), yrange = c(-1, 12))
+
+#Run simulation with homogenous poisson process with intensity lambda = 0.5
+simulation_a <- rpoispp(0.5, win = my_window)
+
+#Run simulation with homogenous poisson process with intensity lambda = 4
+simulation_b <- rpoispp(4, win = my_window )
+```
+
+The next two simulations are slight more complicated and will require more code. The first is given by $\lambda(x, y) = 100 \times \text{ the } N_2({5 \choose 5}\left( \begin{smallmatrix} 3&0.5\sqrt{6}\\ 0.5\sqrt{6}&2 \end{smallmatrix} \right))$. First I make a function, mvdnorm, that computes the density for a bivariate gaussian distribution. Then I make the simulation.
+```{r}
+mvdnorm <- function(x, y, mu, sigma){
+  p <- c(x, y)
+  (2 * pi)^{-1} * det(sigma)^{-1 / 2} * exp(-1 / 2 * (t(p-mu) %*% solve(sigma) %*% (p-mu)))
+}
+
+mvdnorm_for_rpoispp <- function(x, y, mu, sigma){
+  d <- rep(NA, length(x))
+  for(i in 1:length(d)){
+    d[i] <- mvdnorm(x[i], y[i], mu, sigma)
+  }
+  return(d)
+}
+my_mu <- c(5, 5)
+my_sigma <- matrix(c(3, 0.5*sqrt(6), 0.5*sqrt(6), 2), nrow = 2, byrow = T)
+lambda_c <- function(x, y) {100 * mvdnorm_for_rpoispp(x, y, my_mu, my_sigma)}
+
+simulation_c <-  rpoispp(lambda = lambda_c, win = my_window)
+```
+
+The final function is just a drop off function. It is inhomogenous with $\lambda(x,y) = 0.2$ for $x <6$  and $\lambda(x, y) = 4$, otherwise. 
+```{r}
+lambda_d <- function(x, y){
+  l <- rep(4, length(x))
+  for(i in 1:length(l))
+    if(x[i]<6) l[i] = 0.2
+  l
+}    
+
+simulation_d <- rpoispp(lambda_d, win = my_window)
+```
+
+# Next construct a search function as presented in the paper
+We will make this whole thing workable by having a clever matrix with all the relevant information. 
+
+First, Create the lattice
+```{r}
+my_lattice <- cbind(c(rep(1, 10), rep(2, 10), rep(3, 10), rep(4, 10), rep(5, 10),rep(6, 10), rep(7, 10), rep(8, 10), rep(9, 10), rep(10, 10)), rep(seq(1, 10), 10))
+```
+
+Next let's break up the lattice into validation sets.
+
+```{r}
+val_sets <- function(sets_number, total){
+  sample(1:total, size = total, replace = FALSE) %/% sets_number + 1
+}
+
+final <- cbind(val_sets(10, nrow(my_lattice)), my_lattice)
+```
+Next lets make a nearest-neighbor function. It will use euclidean distance to find a nearest neighbor. It works returns both the point and the distance. 
+
+```{r}
+d2 <- function(a, b) (a[1]-b[1])^2 + (a[2]- b[2])^2
+nearest_point <- function(x, y, d){
+  my_min <- c(NA, NA, Inf)
+  for(i in 1:nrow(d)){
+    current_distance <- d2(c(d[i,1], d[i,2]), c(x, y))
+    current_min <- my_min[3]
+    if(current_distance < current_min){
+      my_min <- c(d[i,1], d[i,2], current_distance)
+    }
+  }
+  my_min
+}
+```
+
+Now expand the matrix to include information about nearest neighbor pairs. This is where things start to get specific. I have used the d_values to determine the 
+1st nearest neighbor approximation for the first simulation(homogenous )
+```{r}
+d_values <- matrix(rep(NA, 3 * nrow(my_lattice)), nrow = nrow(my_lattice))
+for(i in 1:nrow(my_lattice)){
+  d_values[i,] <- nearest_point(my_lattice[i, 1], my_lattice[i, 2], cbind(simulation_c$x, simulation_c$y))
+}
+final <- cbind(final, d_values)
+```
+
+As of now, final is a 100X6 row with columns validation set, x value, y value, x nearest neighbor, y nearest neighbor, and distance respectively. The next thing that I want to include
+is the area of valid cover for each point. This is where stuff start to get kind of difficult. I think I want to at each point look at everything that came before it and everything after it not in the same validation set. This allows me to count all the areas in the validation set exactly once, but never count areas that overlap with things outside the validation set. This gets very circle geometry-y. Basically, I should be able to ....
+
+Holy shit. There is a section called computation in the paper. ~breakthroughs~
+
+Ok Update. After talking with andrew there is an every easier way of making this stuff possible. I'm still toying with all this. SO DON"T STOPPP!!!"
+
+Throughout the following discussion. We are going to asssume we have final already computed. 
+
+I'm going to break this up into a whole processs. First, take not of the number of validation sets we have. For our purposes, call it $v$. This process outlines the computations necessary to work out optimal bandwidth selection in the Ellison et. all paper. Note that in the following steps I have assumed, for the sake of computational efficiency, that we only need to drop points once. Steps 1 and 2 are initializers for the process, not to be repeated. Step 3 is a first guess bandwidth(for our purposes all bandwidths will be denoted $\sigma^2$. This step indicates that we are beginning our optimality check. Now we start performing the cross-validation. Step 4 lets you learn the regions for the run through of a particular validation set. Steps 5-9 compute $\hat{ \lambda }_{A}^{S_i}$. Step 6 refers to the computation of a single $\hat{\lambda}$. and steps 9 and 10 wrap the whole things up into a nice computation of $$p(O_{S_i} | \hat{ \lambda }_{\sigma^2}^{S_{-i}}) = e^{-\hat{\lambda}_{A^{S_i}}}$$, or equation 4.2 in the text. Stage 10 stores the result in v. We then repeat the process for the next validatio set and continue until we have exhausted all the sets. We then take the product over V, compare it with whatever the current best performing bw is and if the new one is better we keep it, otherwise keep the old bw. We then return to set 3 to start the whole process over with a new guess for bw. 
+
+1. Make an empty length $v$ vector
+2. Drop points randomly in your window
+3. Pick a starting bw 
+4. Learn your regions for a given validation set and compute the areas for these regions
+5. compute the denominator of 4.1 for $A^{S_{-i}}$
+6. Make function for the numerator of 4.1 given $A^{S_{-i}}$. (This actually changes some from the above discussion)
+7. combine these previous steps to make full $\hat{\lambda}$ function. 
+8. Integrate $\hat{\lambda}$ over $A^{S_i}$. 
+9. Loop over $U_{S_i}$ and compute $\prod_{(j, k)\in U_{S_i}} \hat{\lambda}(O_{jk})$
+10. Compute $p(O_{S_i}| \hat{\lambda}_{\sigma^2}^{S_{-i}}})$
+11. Store result in $v[j]$ where $j$ is the number of current validation step
+12. Repeat stages 4-11 with new validation set
+13. Compute the prod(v)
+14. Compare this to current optimal bandwidth. If it is better, store it, if not, forget it.
+15. Pick a new bw to test
+16. Go back to step 4 with j = 1
+
+Below I simultaneously run through the algorithm and provide an example of it running. It is kind of messed up currently. But the idea should be that the things we need to create and store in each "run through" portion of the code will inform the construction of the final algorithm. 
+#Let's actually implement this....
+Step 1: Make an empty length $v$ vector
+```{r}
+nvalsets <- 10
+val_probs <- rep(NA, nvalsets)
+```
+Step 2. Drop points randomly in your window
+```{r}
+drop_points <- function(npoints, xmax, xmin, ymax, ymin){
+  cbind(runif(npoints, xmin, xmax), runif(npoints, xmin, xmax))
+}
+
+xmax <- 12
+xmin <- -1
+ymax <- 12
+ymin <- -1
+mypts <- drop_points(5000, xmax = 12, xmin = -1, ymax = 12, ymin = -1)
+```
+Step 3. Pick a starting bw 
+```{r}
+starting_bw <- 0.5
+v <- 1
+```
+Step 4. Learn your regions for a given validation set and compute the areas for these regions.
+NOTE: I SHOULD ALSO REALLY SUBSET TO GET RID OF REPEATS IN CHECKSET AND VALSET. THIS WILL BE WAY MORE FRUITFUL....
+```{r}
+checkset <- final[final[,1] != v,]
+valset <- final[final[,1] == v,]
+
+inCheckedRegion<- function(pts, checkset){
+  pts[!is.na(in_Area(pts, checkset)),]
+}
+
+inValidationRegion <- function(pts, valset, checkset){
+  pts[!is.na(in_Area(pts, valset)) & is.na(in_Area(pts, checkset)),]
+}
+
+in_Area <- function(pts, region){
+  v <- rep(NA, nrow(pts))
+  for(i in 1:length(v)){
+    for(j in 1:nrow(region)){
+      if(d2(pts[i, 1:2], region[j, 2:3]) < region[j, 6]){
+        v[i] <- T
+      }
+    }
+  }
+  return(v)  
+}  
+
+checked_Region <- inCheckedRegion(mypts, checkset)
+validation_Region <- inValidationRegion(mypts, valset, checkset)
+check_region_area <- nrow(checked_Region)/nrow(mypts) * (xmax - xmin) * (ymax - ymin)
+validation_region_area <- nrow(validation_Region)/nrow(mypts) * (xmax - xmin) * (ymax - ymin)
+```
+
+Step 5. compute the denominator of 4.1 for $A^{S_{-i}}$. Wait, fuck, this is going to change everytime depending of the input from valationRegion....ugh. Guess we have to do them one at a time....
+
+First, though we will get rid of extra points. We won't need duplicates any more (I don't think...)
+```{r}
+find_duplicates <- function(my_matrix){
+  for_keeps <- 1:nrow(my_matrix)
+  for(i in 2:nrow(my_matrix)){
+    for(j in 1:(i-1)){
+      if(my_matrix[j, 4] == my_matrix[i, 4] & my_matrix[j, 5] == my_matrix[i, 5]){
+        for_keeps[j] <- NA
+      }
+    }
+  }
+  for_keeps[!is.na(for_keeps)]
+}
+
+checkset <- checkset[find_duplicates(checkset),]
+valset <- valset[find_duplicates(valset),]
+```
+
+```{r}
+lambda_A_checked <- function(pt, checkedRegion, checkedArea, bw){
+  mean_A_checked <- 0
+  covMatrix <- matrix(c(bw, 0, 0, bw), nrow = 2)
+  for(i in 1:nrow(checkedRegion)){
+    mean_A_checked <- (mean_A_checked * (i - 1) + twod_dnorm(checkedRegion[i, 1:2], pt, covMatrix))/i
+  } 
+  mean_A_checked * checkedArea 
+}
+
+lambda_A_checked(c(3, 3), checked_Region, check_region_area, starting_bw)
+# in our function we will have to perform this operation for every single point in the checked area
+```
+
+Step 6. Make function for the numerator of 4.1 given $A^{S_{-i}}$. (This actually changes some from the above discussion)
+```{r}
+num_lambda_hat <- function(pt, checkset, bw){
+  sum <- 0
+  covMatrix <- matrix(c(bw, 0, 0, bw), nrow = 2)
+  for(i in 1:nrow(checkset)){
+    sum <- sum + twod_dnorm(checkset[i, 2:3], pt, covMatrix)
+  }
+  sum
+}
+
+num_lambda_hat(c(3,3 ), checkset, starting_bw)
+```
+Step 7. combine these previous steps to make full $\hat{\lambda}$ function. 
+```{r}
+lambda_hat <- function(pt_x, pt_y, checkset, bw, checkedRegion, checkedArea){
+  pt <- c(pt_x, pt_y)
+  num_lambda_hat(pt, checkset, bw)/lambda_A_checked(pt, checkedRegion, checkedArea, bw)
+}
+
+lambda_hat(5, 5, checkset, bw = 0.5, checked_Region, check_region_area)
+```
+
+Step 8. Integrate $\hat{\lambda}$ over $A^{S_i}$. 
+```{r}
+exp_value <- function(validationRegion, validationRegionArea, checkedRegion, checkedArea, checkset, bw){
+  mu <- 0
+  for(i in 1:nrow(validationRegion)){
+    mu <- (mu * (i - 1) + lambda_hat(validationRegion[i, 1], validationRegion[i, 2], checkset, bw, checkedRegion, checkedArea)) / i
+  }
+  mu * validationRegionArea 
+}
+
+exp_int <- exp_value(validation_Region, validation_region_area, checked_Region, check_region_area, checkset, starting_bw)
+```
+
+Step 9. Loop over $U_{S_i}$ and compute $\prod_{(j, k)\in U_{S_i}} \hat{\lambda}(O_{jk})$
+```{r}
+prod_part <- function(valid_set, checkedRegion, checkedArea, checkset, bw){
+  prod <- 1
+  for(i in 1:nrow(valid_set)){
+    prod <- prod * lambda_hat(valid_set[i, 4], valid_set[i,5], checkset, bw, checkedRegion, checkedArea)
+  }
+  prod
+}
+
+rel_product <- prod_part(valset, checked_Region, check_region_area, checkset, starting_bw)  
+```  
+
+Step 10. Compute $p(O_{S_i}| \hat{\lambda}_{\sigma^2}^{S_{-i}}})$
+```{r}
+final_comp <- function(validSet, checkedSet, validationRegion, validationArea, checkedRegion, checkedArea, bw){
+  exp(-exp_value(validationRegion, validationArea, checkedRegion, checkedArea, checkedSet, bw)) * prod_part(validSet, checkedRegion, checkedArea, checkedSet, bw)
+}
+
+exp(-exp_int) * rel_product
+final_comp(valset, checkset, validation_Region, validation_region_area, checked_Region, check_region_area, starting_bw)
+
+prob_O_Si <- function(val_num, d, pts, bw, xmax, xmin, ymax, ymin){
+  #Break up into checksets and valset 
+  checkset <- d[d[,1] != val_num,]
+  valset <- d[d[,1] == val_num,]
+  #Learn Regions
+  checked_Region <- inCheckedRegion(pts, checkset)
+  validation_Region <- inValidationRegion(pts, valset, checkset)
+  check_region_area <- nrow(checked_Region)/nrow(pts) * (xmax - xmin) * (ymax - ymin)
+  validation_region_area <- nrow(validation_Region)/nrow(pts) * (xmax - xmin) * (ymax - ymin)
+  #Remove duplicates
+  checkset <- checkset[find_duplicates(checkset),]
+  valset <- valset[find_duplicates(valset),]
+  final_comp(valset, checkset, validation_Region, validation_region_area, checked_Region, check_region_area, bw)
+}
+```
+
+Step 11. Store result in $v[j]$ where $j$ is the number of current validation step
+```{r}
+prob_O_Si(1, final, mypts, starting_bw, xmax, xmin, ymax, ymin)
+```
+Step 12 and 13. Repeat stages 4-11 with new validation set. I'll just add this step into the final funciton
+```{r}
+bw_level <- function(bw, nvalsets, d, pts, xmax, xmin, ymax, ymin){
+  prod(sapply(seq(1:nvalsets), prob_O_Si, d, pts, bw, xmax, xmin, ymax, ymin))
+}
+
+bw_level(1.1, 10, final, mypts, xmax, xmin, ymax, ymin)
+```
+Step 14. Compare this to current optimal bandwidth. If it is better, store it, if not, forget it.
+Step 15. Pick a new bw to test
+Step 16. Go back to step 4 with j = 1.
+
+So the full function is really slow right now. And, to make mattters worse, works at a reasonable pace for only coarse bw estimates. 
+```{r}
+opt_bw <- function(npts, nvalsets, d, xmax, xmin, ymax, ymin, min_guess, max_guess, step_value){
+  mypts <- drop_points(npts, xmax = xmax, xmin = xmin, ymax = ymax, ymin = ymin)
+  v <- sapply(seq(min_guess, max_guess, by = step_value), bw_level, nvalsets, d, mypts, xmax, xmin, ymax, ymin)
+  min_guess + step_value * which.max(v)
+}
+
+
+
+```
+
+After we find the "best" bandwidth, a process which is currently to slow two to be carried out well, we can then make a contour plot of the estimated data.
+
+#Now let's get the full thing going
+```{r}
+lambda_hat_final <- function(pt_x, pt_y, my_set, bw, my_region, my_Area){
+  pt <- c(pt_x, pt_y)
+  num_lambda_hat(pt, my_set, bw)/lambda_A_checked(pt, my_region, my_Area, bw)
+}
+
+mypts <- drop_points(5000, xmax = 12, xmin = -1, ymax = 12, ymin = -1)
+
+final <- NA
+final <- cbind(val_sets(10, nrow(my_lattice)), my_lattice)
+d_values <- matrix(rep(NA, 3 * nrow(my_lattice)), nrow = nrow(my_lattice))
+for(i in 1:nrow(my_lattice)){
+  d_values[i,] <- nearest_point(my_lattice[i, 1], my_lattice[i, 2], cbind(simulation_a$x, simulation_a$y))
+}
+final <- cbind(final, d_values)
+myRegion <- mypts[!is.na(in_Area(mypts, final)),]
+myArea <- nrow(myRegion)/nrow(mypts) * 13^2
+X <- seq(-1, 12, by = 1)
+Y <- seq(-1, 12, by = 1)
+XforZ <- as.vector(sapply(Y, rep, length(Y)))
+#simulation_1_optBW <- opt_bw(npts = 500, nvalsets = 5, d = final,  xmax, xmin, ymax, ymin, min_guess = 1, max_guess = 30, step_value = 0.5)
+Z <- matrix(mapply(lambda_hat_final, XforZ, Y, MoreArgs = list(my_set = final, bw = .536, my_region = myRegion, my_Area = myArea)), nrow = 14, byrow = T)
+contour(X, Y, Z)
+points(simulation_a)
+
+final <- NA
+final <- cbind(val_sets(10, nrow(my_lattice)), my_lattice)
+d_values <- matrix(rep(NA, 3 * nrow(my_lattice)), nrow = nrow(my_lattice))
+for(i in 1:nrow(my_lattice)){
+  d_values[i,] <- nearest_point(my_lattice[i, 1], my_lattice[i, 2], cbind(simulation_b$x, simulation_b$y))
+}
+final <- cbind(final, d_values)
+myRegion <- mypts[!is.na(in_Area(mypts, final)),]
+myArea <- nrow(myRegion)/nrow(mypts) * 13^2
+lambda_hat(4, 4, final, 10, myRegion, myArea)
+
+Z <- matrix(mapply(lambda_hat_final, XforZ, Y, MoreArgs = list(my_set = final, bw = 10, my_region = myRegion, my_Area = myArea)), nrow = 14, byrow = T)
+contour(X, Y, Z)
+
+
+final <- NA
+final <- cbind(val_sets(10, nrow(my_lattice)), my_lattice)
+d_values <- matrix(rep(NA, 3 * nrow(my_lattice)), nrow = nrow(my_lattice))
+for(i in 1:nrow(my_lattice)){
+  d_values[i,] <- nearest_point(my_lattice[i, 1], my_lattice[i, 2], cbind(simulation_c$x, simulation_c$y))
+}
+final <- cbind(final, d_values)
+myRegion <- mypts[!is.na(in_Area(mypts, final)),]
+myArea <- nrow(myRegion)/nrow(mypts) * 13^2
+#simulation_c_optBW <- opt_bw(npts = 1000, nvalsets = 10, d = final,  xmax, xmin, ymax, ymin, max_guess = 2, min_guess = 0.1, step_value = 0.1)
+lambda_hat(5, 5, final, 0.3, myRegion, myArea)
+Z <- matrix(mapply(lambda_hat_final, XforZ, Y, MoreArgs = list(my_set = final, bw = 2.1, my_region = myRegion, my_Area = myArea)), nrow = 14, byrow = T)
+contour(X, Y, Z)
+
+final <- NA
+final <- cbind(val_sets(10, nrow(my_lattice)), my_lattice)
+d_values <- matrix(rep(NA, 3 * nrow(my_lattice)), nrow = nrow(my_lattice))
+for(i in 1:nrow(my_lattice)){
+  d_values[i,] <- nearest_point(my_lattice[i, 1], my_lattice[i, 2], cbind(simulation_d$x, simulation_d$y))
+}
+final <- cbind(final, d_values)
+myRegion <- mypts[!is.na(in_Area(mypts, final)),]
+myArea <- nrow(myRegion)/nrow(mypts) * 13^2
+lambda_hat(5, 5, final, 7, myRegion, myArea)
+Z <- matrix(mapply(lambda_hat_final, XforZ, Y, MoreArgs = list(my_set = final, bw = 4, my_region = myRegion, my_Area = myArea)), nrow = 14, byrow = T)
+contour(X, Y, Z)
+```
+
+
+#Working with the bog data
+```{r read-dat, message = FALSE, fig.height = 5, fig.width = 5}
+X <- seq(0, 11, by = 0.5)
+Y <- seq(0, 11, by = 0.5)
+XforZ <- as.vector(sapply(Y, rep, length(Y)))
+
+X <- seq(0, 11, by = 1.25)
+Y <- seq(0, 11, by = 1.25)
+XforZ <- as.vector(sapply(Y, rep, length(Y)))
+
+library(dplyr)
+d <- read.csv("../plants-all-bogs.csv")
+d_12M <-
+  d %>%
+  filter(bog == "12M")
+sx <- rep(1:10, 10)
+sy <- rep(1:10, each = 10)
+plot(sx, sy, xlab = "", ylab = "", pch = 16)
+
+par(mfrow == c(2, 2))
+final <- NA
+final <- cbind(val_sets(10, nrow(my_lattice)), my_lattice)
+d_values <- matrix(rep(NA, 3 * nrow(my_lattice)), nrow = nrow(my_lattice))
+for(i in 1:nrow(my_lattice)){
+  d_values[i,] <- nearest_point(my_lattice[i, 1], my_lattice[i, 2], cbind(d_12M$plantX / 1000, d_12M$plantY / 1000))
+}
+final <- cbind(final, d_values)
+
+mypts <- drop_points(10000, xmax = 11, xmin = 0, ymax = 11, ymin = 0)
+myRegion <- mypts[!is.na(in_Area(mypts, final)),]
+myArea <- nrow(myRegion)/nrow(mypts) * 11^2
+Z <- matrix(mapply(lambda_hat_final, XforZ, Y, MoreArgs = list(my_set = final, bw = 0.67, my_region = myRegion, my_Area = myArea)), nrow = length(X), byrow = T)
+contour(X, Y, Z,xlim = c(1, 10), ylim = c(1, 10), zlim = c(0, 10))
+points(my_lattice, col = "black", pch = 16)
+points(d_12M$plantX / 1000, d_12M$plantY / 1000, pch = 16, col = "red")
+```
+
+An issue arises when considering how they calculated the area.
+```{r}
+d_EBB <-
+  d %>%
+  filter(bog == "EBB")
+sx <- rep(1:10, 10)
+sy <- rep(1:10, each = 10)
+plot(sx, sy, xlab = "", ylab = "", pch = 16)
+points(d_EBB[,2] / 1000, d_EBB[,3] / 1000, col = "red")
+
+par(mfrow == c(2, 2))
+final <- NA
+final <- cbind(val_sets(10, nrow(my_lattice)), my_lattice)
+d_values <- matrix(rep(NA, 3 * nrow(my_lattice)), nrow = nrow(my_lattice))
+for(i in 1:nrow(my_lattice)){
+  d_values[i,] <- nearest_point(my_lattice[i, 1], my_lattice[i, 2], cbind(d_EBB$plantX / 1000, d_EBB$plantY / 1000))
+}
+final <- cbind(final, d_values)
+
+mypts <- drop_points(10000, xmax = 11, xmin = 0, ymax = 11, ymin = 0)
+myRegion <- mypts[!is.na(in_Area(mypts, final)),]
+myArea <- nrow(myRegion)/nrow(mypts) * 11^2
+Z <- matrix(mapply(lambda_hat_final, XforZ, Y, MoreArgs = list(my_set = final, bw = 0.56, my_region = myRegion, my_Area = myArea)), nrow = length(X), byrow = T)
+contour(X, Y, Z, levels = seq(0, 2.2, by = 0.2), xlim = c(1, 10), ylim = c(1, 10), zlim = c(0, 5))
+points(my_lattice, col = "black", pch = 16)
+points(d_12M$plantX / 1000, d_12M$plantY / 1000, pch = 16, col = "red")
+```
+
+
+
+
+
+
+

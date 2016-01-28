@@ -1,0 +1,271 @@
+---
+title: "Prettier Paper Repl"
+output: html_document
+---
+
+---
+title: "Paper Replication"
+header-includes:
+  - \usepackage{amsmath}
+output: pdf_document
+---
+
+# Make simulated spp data
+I'm trying to figure out the spatstat package here.
+
+```{r}
+library(spatstat)
+library(MASS)
+library(spptrees)
+library(dplyr)
+
+set.seed(1234)
+
+#set the desired window. 
+my_window <- owin(xrange = c(-1, 12), yrange = c(-1, 12))
+
+my_lattice <- cbind(c(rep(1, 10), rep(2, 10), rep(3, 10), rep(4, 10), rep(5, 10),rep(6, 10), rep(7, 10), rep(8, 10), rep(9, 10), rep(10, 10)), rep(seq(1, 10), 10))
+```
+
+#Simulation A
+```{r}
+#Run simulation with homogenous poisson process with intensity lambda = 0.5
+simulation_a <- rpoispp(0.5, win = my_window)
+```
+
+```{r}
+mypts <- drop_points(50000, xmax = 12, xmin = -1, ymax = 12, ymin = -1)
+
+final <- NA
+final <- cbind(val_sets(10, nrow(my_lattice)), my_lattice)
+d_values <- matrix(rep(NA, 3 * nrow(my_lattice)), nrow = nrow(my_lattice))
+for(i in 1:nrow(my_lattice)){
+  d_values[i,] <- nearest_point(my_lattice[i, 1], my_lattice[i, 2], cbind(simulation_a$x, simulation_a$y))
+}
+final <- cbind(final, d_values)
+myRegion <- mypts[!is.na(in_Area(mypts, final)),]
+myArea <- nrow(myRegion)/nrow(mypts) * 13^2
+X <- seq(-1, 12, by = 1)
+Y <- seq(-1, 12, by = 1)
+XforZ <- as.vector(sapply(Y, rep, length(Y)))
+Z <- matrix(mapply(lambda_hat, XforZ, Y, MoreArgs = list(my_set = final, bw = .536, my_region = myRegion, my_Area = myArea)), nrow = 14, byrow = T)
+contour(X, Y, Z)
+points(simulation_a)
+```
+
+
+#Simulation B
+```{r}
+#Run simulation with homogenous poisson process with intensity lambda = 4
+simulation_b <- rpoispp(4, win = my_window )
+```
+
+```{r}
+mypts <- drop_points(5000, xmax = 12, xmin = -1, ymax = 12, ymin = -1)
+
+final <- NA
+final <- cbind(val_sets(10, nrow(my_lattice)), my_lattice)
+d_values <- matrix(rep(NA, 3 * nrow(my_lattice)), nrow = nrow(my_lattice))
+for(i in 1:nrow(my_lattice)){
+  d_values[i,] <- nearest_point(my_lattice[i, 1], my_lattice[i, 2], cbind(simulation_b$x, simulation_b$y))
+}
+final <- cbind(final, d_values)
+myRegion <- mypts[!is.na(in_Area(mypts, final)),]
+myArea <- nrow(myRegion)/nrow(mypts) * 13^2
+lambda_hat(4, 4, final, 10, myRegion, myArea)
+Z <- matrix(mapply(lambda_hat, XforZ, Y, MoreArgs = list(my_set = final, bw = 1.571, my_region = myRegion, my_Area = myArea)), nrow = 14, byrow = T)
+contour(X, Y, Z)
+```
+
+#Simulation C
+The next two simulations are slight more complicated and will require more code. The first is given by $\lambda(x, y) = 100 \times \text{ the } N_2({5 \choose 5}\left( \begin{smallmatrix} 3&0.5\sqrt{6}\\ 0.5\sqrt{6}&2 \end{smallmatrix} \right))$. First I make a function, mvdnorm, that computes the density for a bivariate gaussian distribution. Then I make the simulation.
+```{r}
+mvdnorm <- function(x, y, mu, sigma){
+  p <- c(x, y)
+  (2 * pi)^{-1} * det(sigma)^{-1 / 2} * exp(-1 / 2 * (t(p-mu) %*% solve(sigma) %*% (p-mu)))
+}
+
+mvdnorm_for_rpoispp <- function(x, y, mu, sigma){
+  d <- rep(NA, length(x))
+  for(i in 1:length(d)){
+    d[i] <- mvdnorm(x[i], y[i], mu, sigma)
+  }
+  return(d)
+}
+my_mu <- c(5, 5)
+my_sigma <- matrix(c(3, 0.5*sqrt(6), 0.5*sqrt(6), 2), nrow = 2, byrow = T)
+lambda_c <- function(x, y) {100 * mvdnorm_for_rpoispp(x, y, my_mu, my_sigma)}
+
+simulation_c <-  rpoispp(lambda = lambda_c, win = my_window)
+```
+
+```{r}
+mypts <- drop_points(5000, xmax = 12, xmin = -1, ymax = 12, ymin = -1)
+
+final <- NA
+final <- cbind(val_sets(10, nrow(my_lattice)), my_lattice)
+d_values <- matrix(rep(NA, 3 * nrow(my_lattice)), nrow = nrow(my_lattice))
+for(i in 1:nrow(my_lattice)){
+  d_values[i,] <- nearest_point(my_lattice[i, 1], my_lattice[i, 2], cbind(simulation_c$x, simulation_c$y))
+}
+final <- cbind(final, d_values)
+myRegion <- mypts[!is.na(in_Area(mypts, final)),]
+myArea <- nrow(myRegion)/nrow(mypts) * 13^2
+#simulation_c_optBW <- opt_bw(npts = 1000, nvalsets = 10, d = final,  xmax, xmin, ymax, ymin, max_guess = 2, min_guess = 0.1, step_value = 0.1)
+lambda_hat(5, 5, final, 0.3, myRegion, myArea)
+Z <- matrix(mapply(lambda_hat, XforZ, Y, MoreArgs = list(my_set = final, bw = 0.555, my_region = myRegion, my_Area = myArea)), nrow = 14, byrow = T)
+contour(X, Y, Z)
+```
+
+```{r}
+C_info <- data.frame(c(1, 1.5, 1.5, 1, 1, 1.5, 5.5, 6, 6), c(10, 10, 9.5, 5, 4.5, 4.5, 5.5, 5.5, 6), rep(0.5, 9), rep(NA, length(pts)))
+colnames(C_info) <- c("X", "Y", "lambda", "lambda_hat")
+
+est_lambda <- function(x, y, bw, lambda, window, lattice){
+  simulation <-  rpoispp(lambda = lambda_c, win = my_window)
+  mypts <- drop_points(5000, xmax = 12, xmin = -1, ymax = 12, ymin = -1)
+
+  final <- NA
+  final <- cbind(val_sets(10, nrow(lattice)), lattice)
+  d_values <- matrix(rep(NA, 3 * nrow(lattice)), nrow = nrow(lattice))
+  for(i in 1:nrow(lattice)){
+    d_values[i,] <- nearest_point(lattice[i, 1], lattice[i, 2], cbind(simulation$x, simulation$y))
+  }
+  final <- cbind(final, d_values)
+  myRegion <- mypts[!is.na(in_Area(mypts, final)),]
+  myArea <- nrow(myRegion)/nrow(mypts) * (max(lattice[,1]) - min(lattice[,1])) * (max(lattice[,2]) - min(lattice[,2]))
+  final <- final[find_duplicates(final),]
+  lambda_hat(x, y, final, bw, myRegion, myArea)
+}
+mu <- 0
+for(i in 1:100){
+  mu <- (mu * (i - 1) + est_lambda(1, 10, 0.555, lambda_c, my_window, my_lattice )) / i 
+}
+```
+#Simulation D
+The final function is just a drop off function. It is inhomogenous with $\lambda(x,y) = 0.2$ for $x <6$  and $\lambda(x, y) = 4$, otherwise. 
+```{r}
+lambda_d <- function(x, y){
+  l <- rep(4, length(x))
+  for(i in 1:length(l))
+    if(x[i]<6) l[i] = 0.2
+  l
+}    
+
+simulation_d <- rpoispp(lambda_d, win = my_window)
+```
+
+```{r}
+final <- NA
+final <- cbind(val_sets(10, nrow(my_lattice)), my_lattice)
+d_values <- matrix(rep(NA, 3 * nrow(my_lattice)), nrow = nrow(my_lattice))
+for(i in 1:nrow(my_lattice)){
+  d_values[i,] <- nearest_point(my_lattice[i, 1], my_lattice[i, 2], cbind(simulation_d$x, simulation_d$y))
+}
+final <- cbind(final, d_values)
+myRegion <- mypts[!is.na(in_Area(mypts, final)),]
+myArea <- nrow(myRegion)/nrow(mypts) * 13^2
+lambda_hat(5, 5, final, 7, myRegion, myArea)
+Z <- matrix(mapply(lambda_hat, XforZ, Y, MoreArgs = list(my_set = final, bw = 4, my_region = myRegion, my_Area = myArea)), nrow = 14, byrow = T)
+contour(X, Y, Z)
+```
+
+#Working with the bog data
+```{r read-dat, message = FALSE, fig.height = 5, fig.width = 5}
+X <- seq(0, 11, by = 1)
+Y <- seq(0, 11, by = 1)
+XforZ <- as.vector(sapply(Y, rep, length(Y)))
+
+
+d <- read.csv("../plants-all-bogs.csv")
+d_12M <-
+  d %>%
+  filter(bog == "12M" & plantX > 500 & plantX < 10500 & plantY > 500 & plantX < 10500)
+sx <- rep(1:10, 10)
+sy <- rep(1:10, each = 10)
+plot(sx, sy, xlab = "", ylab = "", pch = 16)
+
+par(mfrow == c(2, 2))
+final <- NA
+final <- cbind(val_sets(10, nrow(my_lattice)), my_lattice)
+d_values <- matrix(rep(NA, 3 * nrow(my_lattice)), nrow = nrow(my_lattice))
+for(i in 1:nrow(my_lattice)){
+  d_values[i,] <- nearest_point(my_lattice[i, 1], my_lattice[i, 2], cbind(d_12M$plantX / 1000, d_12M$plantY / 1000))
+}
+final <- cbind(final, d_values)
+
+mypts <- drop_points(10000, xmax = 11, xmin = 0, ymax = 11, ymin = 0)
+myRegion <- mypts[!is.na(in_Area(mypts, final)),]
+myArea <- nrow(myRegion)/nrow(mypts) * 11^2
+final <- final[find_duplicates(final),]
+Z <- matrix(mapply(lambda_hat, XforZ, Y, MoreArgs = list(my_set = final, bw = 0.67, my_region = myRegion, my_Area = myArea)), nrow = length(X), byrow = T)
+contour(X, Y, Z,xlim = c(1, 10), ylim = c(1, 10), zlim = c(0, 10))
+points(my_lattice, col = "black", pch = 16)
+points(d_12M$plantX / 1000, d_12M$plantY / 1000, pch = 16, col = "red")
+```
+
+An issue arises when considering how they calculated the area.
+```{r}
+d_EBB <-
+  d %>%
+  filter(bog == "EBB" & plantX > 500 & plantX < 10500 & plantY > 500 & plantX < 10500)
+sx <- rep(1:10, 10)
+sy <- rep(1:10, each = 10)
+plot(sx, sy, xlab = "", ylab = "", pch = 16)
+points(d_EBB[,2] / 1000, d_EBB[,3] / 1000, col = "red")
+
+final <- NA
+final <- cbind(val_sets(10, nrow(my_lattice)), my_lattice)
+d_values <- matrix(rep(NA, 3 * nrow(my_lattice)), nrow = nrow(my_lattice))
+for(i in 1:nrow(my_lattice)){
+  d_values[i,] <- nearest_point(my_lattice[i, 1], my_lattice[i, 2], cbind(d_EBB$plantX / 1000, d_EBB$plantY / 1000))
+}
+final <- cbind(final, d_values)
+
+mypts <- drop_points(10000, xmax = 11, xmin = 0, ymax = 11, ymin = 0)
+myRegion <- mypts[!is.na(in_Area(mypts, final)),]
+myArea <- nrow(myRegion)/nrow(mypts) * 11^2
+final <- final[find_duplicates(final),]
+Z <- matrix(mapply(lambda_hat, XforZ, Y, MoreArgs = list(my_set = final, bw = 0.56, my_region = myRegion, my_Area = myArea)), nrow = length(X), byrow = T)
+contour(X, Y, Z, levels = seq(0, 2.4, by = 0.2), xlim = c(1, 10), ylim = c(1, 10), zlim = c(0, 5))
+points(my_lattice, col = "black", pch = 16)
+points(d_EBB$plantX / 1000, d_EBB$plantY / 1000, pch = 16, col = "red")
+```
+
+
+```{r}
+d_NO5 <-
+  d %>%
+  filter(bog == "NO5" & plantX > 500 & plantX < 10000 & plantY > 500 & plantY < 10000)
+sx <- rep(1:10, 10)
+sy <- rep(1:10, each = 10)
+plot(sx, sy, xlab = "", ylab = "", pch = 16)
+points(d_NO5[,2] / 1000, d_NO5[,3] / 1000, col = "red", pch = 16)
+
+par(mfrow == c(2, 2))
+final <- NA
+final <- cbind(val_sets(10, nrow(my_lattice)), my_lattice)
+d_values <- matrix(rep(NA, 3 * nrow(my_lattice)), nrow = nrow(my_lattice))
+for(i in 1:nrow(my_lattice)){
+  d_values[i,] <- nearest_point(my_lattice[i, 1], my_lattice[i, 2], cbind(d_NO5$plantX / 1000, d_NO5$plantY / 1000))
+}
+final <- cbind(final, d_values)
+
+mypts <- drop_points(10000, xmax = 11, xmin = 0, ymax = 11, ymin = 0)
+myRegion <- mypts[!is.na(in_Area(mypts, final)),]
+myArea <- nrow(myRegion)/nrow(mypts) * 11^2
+final <- final[find_duplicates(final),]
+Z <- matrix(mapply(lambda_hat, XforZ, Y, MoreArgs = list(my_set = final, bw = 0.60, my_region = myRegion, my_Area = myArea)), nrow = length(X), byrow = T)
+contour(X, Y, Z, levels = seq(0, 0.4, by = 0.05), xlim = c(1, 10), ylim = c(1, 10), zlim = c(0, 5))
+points(my_lattice, col = "black", pch = 16)
+points(d_NO5$plantX / 1000, d_NO5$plantY / 1000, pch = 16, col = "red")
+```
+
+
+
+
+
+
+
+
+
