@@ -1,0 +1,12 @@
+---
+output: pdf_document
+header-includes: 
+- \usepackage{graphicx,latexsym}
+- \usepackage{amssymb,amsthm,amsmath}
+- \usepackage{longtable,booktabs,setspace}
+---
+
+# Hierarchical Models, Clustering, and K-Trees Sampling
+<!--
+You can delete the header-includes (lines 3-6 above) if you like and also the chunk below since it is loaded in the skeleton.Rmd file.  They are included so that chap3.Rmd will compile by itself when you hit Knit PDF.
+-->
