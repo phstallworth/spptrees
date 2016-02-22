@@ -9,18 +9,18 @@ The {#rmd-basics} text after the chapter declaration will allow us to link throu
 
 ## Informal Definitions and Comments
 
-A *spatial point process*, subsequently referred to as a point process, is a stochastic mechanism which generates a countable set of events in the plane ($\mathbb{R}^2$). Simple point processes are typically *stationary* and *isotropic*. The properties of a stationary point process are invariant under translation, while the properties of an isotropic point process are invariant under rotation. These definitions are less restrictive than they might seem. For instance, they allow for random heterogeneity in the underlying environment. Though defined over the entire plane, spatial point processes are only applied to data from finite regions. Furthermore, in practice, models assuming isotropy or stationarity are typically appropriate for point processes that exhibit approximate stationarity or isotropy. 
+A *spatial point process*, subsequently referred to as a point process, is a stochastic mechanism which generates a countable set of events in the plane ($\mathbb{R}^2$). Basic point processes are typically *stationary* and *isotropic*. The properties of a stationary point process are invariant under translation, while the properties of an isotropic point process are invariant under rotation. These definitions are less restrictive than they might seem. For instance, they allow for random heterogeneity in the underlying environment. Though defined over the entire plane, spatial point processes are only applied to data from finite regions. Furthermore, in practice, models assuming isotropy or stationarity are typically appropriate for point processes that exhibit approximate stationarity or isotropy. 
 
-Statistical analyses of spatial point pattern data typically involve comparisons between empirical summary descriptions of the data and the corresponding theoretical summary descriptions of a model. Importantly, these theoretical summary descriptions must be derived from an underlying model, rather than being models themselves. The most common comparisons pit the empirical summary descriptions against the corresponding summary description under a homogeneous Poisson process. For a more complete introduction to spatial point processes see either Moller and Waagepetersen's *Statistical Inference and Simulation for Spatial Point Processes* or Diggle's *Statistical Analysis of Spatial Point Patterns*.
+Statistical analyses of spatial point pattern data typically involve comparisons between empirical summary descriptions of the data and the corresponding theoretical summary descriptions of a model. Importantly, these theoretical summary descriptions must be derived from an underlying model, rather than being models themselves. The most common comparisons pit the empirical summary descriptions against the corresponding summary description under a homogeneous Poisson process. What follows largely derives from M{\o}ller and Waagepetersen's *Statistical Inference and Simulation for Spatial Point Processes* and Diggle's *Statistical Analysis of Spatial Point Patterns*.
 
 <!-- Alternative section 1. I like this second one better, because it is more mathematically precise. It all comes from Moller and Waagepeterson chapter 2
 -->
 ## Point Processes
 A *spatial point process* $X$ is a random countable subset of a space $S$. In this thesis, $S$ will always be a subset of $\mathbb{R}^d$ and $d$ will typically be 2. Often $S$ will either be a $d$-dimensional box or all of $\mathbb{R}^d$. In practice, we only observe the points in an observation window $W\subseteq S$. 
 
-I restrict my attention to point processes $X$ whose realizations are locally finite subsets of $S$. For any subset $x\subset S$, let $n(x)$ denote the cardinality of $x$, setting $n(x) = \infty$ if $x$ is not finite. $x$ is said to be *locally finite*, if $n(x_B)$ is finite whenever $B\subset S$ is bounded, where $$x_B = x \cap B $$ is the restriction of a point configuration $x$ to $B$. Consequently, $X$ takes values in the space defined by $$N_{lf} = \{ x\subseteq S | n(x_B) < \infty \text{ for all bounded } B\subseteq S \}.$$
+I restrict my attention to point processes $X$ whose realizations are locally finite subsets of $S$. For any subset $x\subset S$, i.e. a realization of $S$, let $n(x)$ denote the cardinality of $x$, setting $n(x) = \infty$ if $x$ is not finite. $x$ is said to be *locally finite*, if $n(x_B)$ is finite whenever $B\subset S$ is bounded, where $$x_B = x \cap B $$ is the restriction of a point configuration $x$ to $B$. Consequently, $X$ takes values in the space defined by $$N_{lf} = \{ x\subseteq S | n(x_B) < \infty \text{ for all bounded } B\subseteq S \}.$$
 
-Elements of $N_{lf}$ are called *locally finite point configurations*, and they will be denoted by $x, y, \dots$ while $\xi, \eta, \dots$ will denote points in $S$. I will typically write $x\cup \xi$ for $x\cup \{ \xi \}$, $x\setminus \eta$ for $s\setminus \{\eta\}$, when $x\in N_{lf}$ and $\xi, \eta \in S$. 
+Elements of $N_{lf}$ are called *locally finite point configurations*, and they will be denoted by $x, y, \dots$ while $\xi, \eta, \dots$ will denote points in $S$. I will typically write $x\cup \xi$ for $x\cup \{ \xi \}$, $x\setminus \eta$ for $x\setminus \{\eta\}$, when $x\in N_{lf}$ and $\xi, \eta \in S$. 
 
 ## Poisson Point Processes
 The Poisson process plays a central role in the point process literature. It serves as the tractable model for "completely spatially random" point processes. Real processes which exhibit complete spatial randomness are undoubtedly rare. However, by comparing empirical summary statistics to those under a theoretical Poisson, statisticians and scientists are able to detect clustering, regularity, and inhomogeneity in the underlying environments. Researchers typically begin data analysis with these comparisons. 
@@ -29,25 +29,23 @@ The Poisson process plays a central role in the point process literature. It ser
 First, lets consider a Poisson point process defined on a space $S\subseteq \mathbb{R}^d$ and specified by a *intensity functon* $\rho : S \rightarrow [0, \infty]$ which is *locally integrable*, i.e. $\int_B \rho(\xi) d\xi < \infty$ for all bounded $B\subseteq S$. For the following definition, we use the *intensity measure* $\mu$ defined by $$\mu(B) = \int_B \rho(\xi) d\xi, \; \; B\subseteq S.$$ Clearly, this measure is locally finite. It is also *diffuse*, i.e. $\mu (\{ \xi \}) = 0$ for all $\xi \in S$. 
 <!-- I could prove that this is indeed a measure, but I don't think that is necessary. -->  
 
-**Definition:** Let $f$ be a density function on a set $B\subseteq S$, and let $n\in \mathbb{N}$. A point process $X$ consisting of $n$ points in $B$ with density $f$ is called a *binomial point process* of $n$ points in $B$ with density $f$. We write $X\sim \text{binomial}(B, n, f)$.
-
 **Definition:**A point process $X$ on $S$ is a *Poisson point process* with intensity function $\rho$ if the following properties are satisfied:
 
 1. For any $B\subseteq S$ with $\mu(B) < \infty$, $N(B) \sim \text{poisson}(\mu(B))$, the Poisson distribution with mean $\mu(B)$. 
-2. For any $n\in \mathbb{N}$ and $B\subseteq S$ with $0\leq \mu(B) < \infty$, conditional on $N(B) = n$, $X_B \sim \text{binomial}(B, n, F)$ with $f(\xi) = \rho(\xi) / \mu(B)$ 
+2. $N(B_1), N(B_2), \dots N(B_n)$ are independent for disjoint sets $B_1, B_2, \dots, B_n \subseteq S$ and $n\geq 2$.
 We then write $X \sim \text{Poisson}(S, \rho)$. 
 
-Sometimes (ii) is replaced with the condition that $N(B_1), N(B_2), \dots N(B_n)$ are independent for disjoint sets $B_1, B_2, \dots, B_n \subseteq S$ and $n\geq 2$. This is called *independent scattering*.
+The second condition is called *independent scattering*.
 Consequently, $\mu$ determines the expected number of points in any $B\subseteq S$. $\rho(\xi) d\xi$ can be thought of as the probability for the occurrence of an event in an infinitesimally small ball with center $\xi$ and volume $d\xi$. 
 
 **Definition:** If $\rho$ is constant, the process Poisson($S, \rho$) is called a *homogeneous Poisson process* on $S$ with *rate* or *intensity* $\rho$; otherwise it is an *inhomogeneous Poisson process* on $S$.
 
 Figure 1.1 displays examples of both homogeneous and inhomogeneous Poisson processes. It should be clear why the homogeneous poisson process matches notions of complete spatial randomness. Homogeneous Poisson processes are both stationary and isotropic. 
 
-**Definition:** A point process $X$ on $\mathbb{R}^d$ is *stationary* if its distribution is translation invariant. In other words, if the distribution of $X + s = \{\xi + s: \xi\in X\}$ is the same as $X$ for any $s\in \mathbb{R}^d$. $X$ is *isotropic* if its distribution is rotation invariant about the origin. 
+**Definition:** A point process $X$ on $\mathbb{R}^d$ is *stationary* if its distribution is translation invariant. In other words, if the distribution of $X + s = \{\xi + s: \xi\in X\}$ is the same as $X$ for any $s\in \mathbb{R}^d$. $X$ is *isotropic* if its distribution is rotation invariant. 
 
 <!-- I would really like to be able to include the following "Left: Simulation of a homogenous Poisson Process on $S = [0, 1]\times [0, 0.7]$ with rate $150$. Right: Simulation of an inhomogeneous Poisson Process over $S =[0, 1] \times [0, 0.7]$ with expected rate $150$. The inhomgeneous Poisson Process has intesity proportional to $\text{exp}(-10.6 \xi_2)$ for each $(\xi_1, \xi_2)\in S$"; however, I don't think the chunk code likes it when I include latex.... -->
-```{r, fig1_1, echo = FALSE, cache = FALSE, include = TRUE, fig.cap = "Caption"}
+```{r, fig1_1, echo = FALSE, cache = FALSE, include = TRUE, fig.cap = "The left hand side is an homogeneous Poisson process with rate 150 and the right is an inhoogeneous poisson process."}
 par(mfrow = c(1, 2))
 plot(rpoispp(150, win = owin(c(0, 1), c(0, 0.7))), main = "")
 prop_const <- 150 * 10.6 + exp(-10.6)
@@ -61,7 +59,7 @@ plot(rpoispp( lambda_function, win = owin(c(0, 1), c(0, 0.7))), main = "")
 
 **Proposition 1.1:** 
 
-(i) $X\sim \text{Poisson}(S, \rho)$ if and only if for all $B\subseteq S$ with $\mu(B) = \int_S \rho(\xi) d\xi < \infty$ and all $F\subseteq N_{lf}$, $$P(X_B\in F) = \sum_{n = 0}^\infty \frac{exp(-\mu(B))}{n!} \int_B \cdots \int_B \mathbf{1}[\{x_1, x_2, \dots, x_n\} \in F] \prod_{i = 1}^n \rho(x_i)dx_1dx_2 \dots dx_n$$ where the integral for $n = 0$ is $\mathbf{1} [\emptyset \in F].$
+(i) $X\sim \text{Poisson}(S, \rho)$ if and only if for all $B\subseteq S$ with $\mu(B) = \int_S \rho(\xi) d\xi < \infty$ and all $G\subseteq N_{lf}$, $$P(X_B\in G) = \sum_{n = 0}^\infty \frac{exp(-\mu(B))}{n!} \int_B \cdots \int_B \mathbf{1}[\{x_1, x_2, \dots, x_n\} \in G] \prod_{i = 1}^n \rho(x_i)dx_1dx_2 \dots dx_n$$ where the integral for $n = 0$ is $\mathbf{1} [\emptyset \in G].$
 (ii) If $X\sim \text{Poisson}(S, \rho)$, then for functions $h:N_{lf} \rightarrow [0, \infty)$ and $B\subseteq S$ with $\mu(B) < \infty$, $$\mathbb{E} [h(X_B)] = \sum_{n = 0}^\infty \frac{exp(-\mu(B))}{n!} \int_B \cdots \int_B h(\{x_1, \dots, x_n \}) \prod_{i = 1}^n dx_1\cdots dx_n.$$
 
 A second proposition demonstrates the validity of the independent scattering property of Poisson processes. 
