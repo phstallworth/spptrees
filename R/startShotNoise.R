@@ -13,6 +13,13 @@ lambdaSN_1 <- function(x, y, shot){
   }
   mySum
 }
+
+rshotnoise <- function(shot, noise, window = owin()){
+  init <- rpoispp(shot)
+  full <- rpoispp(noise, win = window,  shot = init,)
+  full
+}
+
 x <- rep(NA, length(y))
 for(i in 1:101){
   x[(101*(i-1) + 1):(101*i)] <- y[i]
@@ -25,3 +32,6 @@ intens <- lambdaSN_1(x, y, init)
 contour(matrix(intens, nrow = 101, byrow = T), col = "green")
 points(sn, pch = 16, col = "hotpink")
 points(init, col = "forestgreen", pch = 12)
+
+sn <- rshotnoise(10, lambdaSN_1)
+plot(sn)
